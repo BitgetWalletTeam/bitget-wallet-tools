@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>Tools</title>
+</head>
+<body>
+
+<script src="./vue-2.6.10.js"></script>
+<script src="./element-ui/index.js"></script>
+<link rel="stylesheet" type="text/css" href="./element-ui/index.css" />
+
+<script src="./qrcode.js"></script>	
+<!-- 
+https://element.eleme.cn/#/zh-CN/component/alert 
+-->
+
+<style type="text/css">
+	body {
+		font-family: arial;
+	}
+	h1 {
+		font-size: 2rem;
+	}
+	.box-card{
+		max-width: 600px;
+		margin:  20px;
+	}
+	.el-tabs__content{
+		display: none;
+	}
+	input,textarea {
+	}
+</style>
+
+<div class="bitget-tools" id="App">
+	<h1>Bitget Wallet Tools</h1>
+
+	<el-tabs v-model="toolName">
+    	<el-tab-pane label="Deeplink" name="Deeplink">Deeplink</el-tab-pane>
+	</el-tabs>
+
+	<div>
+		技术文档 <el-link type="primary" :href="docs" target="_blank">{{ docs }}</el-link>
+	</div>
+
+	<el-form :model="dappInfo" status-icon ref="dappInfo" label-width="100px" class="demo-ruleForm">
+		<el-card class="box-card">
+			<h3>DApp</h3>
+			<el-form-item required label="name" prop="dappName">
+			    <el-input placeholder="dapp name" v-model="dappInfo.dappName" autocomplete="off"></el-input>
+			</el-form-item>
+			<el-form-item required label="icon" prop="dappIcon">
+			    <el-input placeholder="https://xxxxxxx" v-model="dappInfo.dappIcon" autocomplete="off"></el-input>
+			</el-form-item>
+			<el-form-item required label="homepage" prop="homepage">
+			    <el-input placeholder="https://xxxxxxx" v-model="dappInfo.homepage" autocomplete="off"></el-input>
+			</el-form-item>
+		</el-card>
+
+
+		<el-card class="box-card">
+			<el-form-item label="Wallet API" prop="action" required>
+				<el-select
+				    v-model="dappInfo.action"
+				    filterable
+				    @change="apiSelected"
+				    placeholder="Select API">
+				    <el-option
+						v-for="(value, apiName) in walletAPIs"
+						:key="apiName"
+						:label="apiName"
+						:value="apiName">
+				    </el-option>
+				</el-select>
+			</el-form-item>
+			<el-form-item
+				v-for="(value, key) in dappInfo.params"
+				v-if="dappInfo.action && (walletAPIs[dappInfo.action] || {}).hasOwnProperty(key)" 
+				:label="key" 
+				:prop="'params.' + key"
+				required
+				:key="key">
+			    <el-input 
+			    	:placeholder="(walletAPIs[dappInfo.action] || {})[key]"
+			    	v-model="dappInfo.params[key]"></el-input>
+			    <div v-if="key == 'chain'">
+			    	<el-link type="primary" href="https://chainlist.org/" target="_blank">chain 信息查询: https://chainlist.org</el-link>
+			    </div>
+			</el-form-item>
+		</el-card>
+
+		<div style="margin-left: 20px;">
+			<el-button type="primary" @click="createDeepLink('bitkeep://bkconnect')">生成 bitkeep://bkconnect</el-button>
+			<el-button type="primary" @click="createDeepLink('https://bkcode.vip')">生成 https://bkcode.vip</el-button>
+		</div>
+	</el-form>
+
+	<el-dialog
+	  title="DeepLink"
+	  :visible.sync="deepLinkResult.pop"
+	  width="500px"
+	  :before-close="closePop">
+	  <div style="text-align: center; margin-top: -20px;">
+	  	<p>{{ deepLinkResult.link }}</p>
+	  	<el-image :src="deepLinkResult.qrcode"></el-image>
+	  </div>
+	  <span slot="footer" class="dialog-footer">
+	    <el-button @click="deepLinkResult.pop = false">关闭</el-button>
+	  </span>
+	</el-dialog>
+
+	<div style="height:100px"></div>
+</div>
+
+<!-- <pre>
+	1. dapp url 
+	2. 默认必须参数
+	3. 可选参数
+	4. 其他参数：统计等
+	5. 输入 link + 二维码
+</pre> -->
+<script>
+var walletAPIs = {
+	'DApp': {
+		url: 'https://xxxxxx'
+	},
+	'switchChain': {
+		chain: 'chainId: 0x1 or 1'
+	},
+	'getAccount': {
+		chain: 'chainId: 0x1 or 1'
+	}, 
+	'addAsset': {
+		chain: 'chainId: 0x1 or 1',
+		contract: 'contract address',
+		symbol: 'symbol'
+	}, 
+	'send': {
+		chain: 'chainId: 0x1 or 1',
+		contract: 'contract address',
+		to: 'receive address',
+		amount: '0',
+		memo: ''
+	}, 
+	'sign': {
+		chain: 'chainId: 0x1 or 1',
+		signType: '',
+		msg: 'message to sign'
+	}, 
+};
+
+new Vue({
+	el: '#App',
+	data: function(){
+		return {
+			toolName: 'Deeplink',
+			docs: 'https://web3.bitget.com/zh-CN/docs/mobile/open-app-wallet.html',
+			dappInfo: {
+				homepage: '',
+				version: '8.14.0',
+				dappName: '',
+				dappIcon: '',
+				action: '',
+				actionID: '',
+				params: {
+					url: '',
+					chain: '',
+					contract: '',
+					symbol: '',
+					to: '',
+					amount: '',
+					memo: '',
+					signType: '',
+					msg: ''
+				}
+			},
+			walletAPIs: walletAPIs,
+			chainList: [],
+			deepLinkResult: {
+				pop: false,
+				link: '',
+				qrcde: ''
+			}
+		}
+	},
+	mounted: function(){
+	},
+	methods: {
+		chainSelected: function(){},
+		apiSelected: function(){},
+		closePop: function(){
+			this.deepLinkResult.pop = false;
+		},
+		createDeepLink: function(link){
+			let _this = this;
+			this.$refs['dappInfo'].validate((valid) => {
+	          if (valid) {
+	          	_this.createDeepLinkWithQrcode(link);
+	          } else {
+	            console.log('error submit!!');
+	            return false;
+	          }
+	        });
+		},
+		createDeepLinkWithQrcode: function(link){
+			let _this = this;
+			link += '?'
+
+			let dappInfo = JSON.parse(JSON.stringify(this.dappInfo));
+			let params = dappInfo.params;
+			console.log(dappInfo, params);
+			let whitelist = this.walletAPIs[dappInfo.action] || {};
+
+			dappInfo.actionID = Math.random();
+			for(var key in whitelist){
+				dappInfo[key] = params[key] || '';
+			}
+			let arr = [];
+			for(var key in dappInfo){
+				let kv = key + '=' + encodeURIComponent(dappInfo[key]);
+				arr.push(kv);
+			}
+			link += arr.join('&');
+
+			_this.createQcode(link, function(qrcode){
+				_this.deepLinkResult = {
+					pop: true,
+					link: link,
+					qrcode: qrcode
+				};
+				console.log(qrcode, true);
+			});
+
+		},
+		createQcode: function(link, callback){
+			var width = 200;
+			var height = 200;
+
+			var node = document.createElement("div");
+			new window.QRCode(node, link.toString());
+			setTimeout(function(){
+				var newImageData = node.getElementsByTagName("img")[0].src;
+				callback(newImageData)
+			},100);
+		}
+	}
+})	
+</script>
+
+</body>
+</html>
